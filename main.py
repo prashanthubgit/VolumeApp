@@ -4,8 +4,11 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
 from kivy.uix.slider import Slider
 from kivy.uix.button import Button
+from kivy.uix.togglebutton import ToggleButton
 from kivy.utils import get_color_from_hex
 from kivy.uix.popup import Popup
+from kivy.clock import Clock
+from kivy.garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
 import os
 
 # Try to import pyjnius for Android volume control
@@ -15,6 +18,8 @@ try:
     Context = autoclass('android.content.Context')
     AudioManager = autoclass('android.media.AudioManager')
     PythonActivity = autoclass('org.kivy.android.PythonActivity')
+    Intent = autoclass('android.content.Intent')
+    Uri = autoclass('android.net.Uri')
     HAS_PYJNIUS = True
 except ImportError:
     HAS_PYJNIUS = False
@@ -28,6 +33,7 @@ class VolumeControl(BoxLayout):
         
         # Audio manager for Android
         self.audio_manager = None
+        self.activity = None
         if HAS_PYJNIUS:
             try:
                 self.activity = PythonActivity.mActivity
@@ -36,48 +42,59 @@ class VolumeControl(BoxLayout):
                 print(f"Error initializing AudioManager: {e}")
 
         # Heading
-        heading = Label(text="PKTW THINKING", font_size='28sp',
-                        color=get_color_from_hex("#FFFFFF"), size_hint=(1, 0.15))
+        heading = Label(text="🔊 PKTW THINKING 🔊", font_size='28sp',
+                        color=get_color_from_hex("#FFFFFF"), size_hint=(1, 0.12), bold=True)
         self.add_widget(heading)
 
         # Instagram link button
-        insta_btn = Button(text="Created by - ig_gap_", size_hint=(1, 0.1),
-                           background_color=get_color_from_hex("#1DA1F2"),
-                           color=get_color_from_hex("#FFFFFF"))
+        insta_btn = Button(text="👤 Created by - ig_gap_", size_hint=(1, 0.08),
+                           background_color=get_color_from_hex("#E1306C"),
+                           color=get_color_from_hex("#FFFFFF"), font_size='14sp')
         insta_btn.bind(on_release=self.open_instagram)
         self.add_widget(insta_btn)
 
         # Volume sliders with labels
         self.volume_sliders = {}
-        self.add_widget(self.create_slider("Media Volume", AudioManager.STREAM_MUSIC if HAS_PYJNIUS else 3))
-        self.add_widget(self.create_slider("Ringtone Volume", AudioManager.STREAM_RING if HAS_PYJNIUS else 2))
-        self.add_widget(self.create_slider("Alarm Volume", AudioManager.STREAM_ALARM if HAS_PYJNIUS else 4))
-        self.add_widget(self.create_slider("Notification Volume", AudioManager.STREAM_NOTIFICATION if HAS_PYJNIUS else 5))
+        self.add_widget(self.create_slider("🎵 Media Volume", AudioManager.STREAM_MUSIC if HAS_PYJNIUS else 3))
+        self.add_widget(self.create_slider("📞 Ringtone Volume", AudioManager.STREAM_RING if HAS_PYJNIUS else 2))
+        self.add_widget(self.create_slider("⏰ Alarm Volume", AudioManager.STREAM_ALARM if HAS_PYJNIUS else 4))
+        self.add_widget(self.create_slider("🔔 Notification Volume", AudioManager.STREAM_NOTIFICATION if HAS_PYJNIUS else 5))
+
+        # Mute/Unmute button
+        mute_btn = Button(text="🔇 Mute All", size_hint=(1, 0.08),
+                          background_color=get_color_from_hex("#FF6B6B"),
+                          color=get_color_from_hex("#FFFFFF"), font_size='14sp')
+        mute_btn.bind(on_release=self.mute_all_volumes)
+        self.add_widget(mute_btn)
+
+        # Unmute button
+        unmute_btn = Button(text="🔊 Unmute All", size_hint=(1, 0.08),
+                            background_color=get_color_from_hex("#51CF66"),
+                            color=get_color_from_hex("#FFFFFF"), font_size='14sp')
+        unmute_btn.bind(on_release=self.unmute_all_volumes)
+        self.add_widget(unmute_btn)
 
     def open_instagram(self, instance):
         """Open Instagram profile using Android Intent"""
         if HAS_PYJNIUS:
             try:
-                Intent = autoclass('android.content.Intent')
-                Uri = autoclass('android.net.Uri')
-                activity = PythonActivity.mActivity
-                
-                intent = Intent()
-                intent.setAction(Intent.ACTION_VIEW)
-                intent.setData(Uri.parse("https://instagram.com/ig_gap_"))
-                activity.startActivity(intent)
+                if self.activity:
+                    intent = Intent()
+                    intent.setAction(Intent.ACTION_VIEW)
+                    intent.setData(Uri.parse("https://instagram.com/ig_gap_"))
+                    self.activity.startActivity(intent)
             except Exception as e:
                 print(f"Error opening Instagram: {e}")
-                self.show_popup("Instagram", "Could not open Instagram. Please visit: https://instagram.com/ig_gap_")
+                self.show_popup("Instagram", "Could not open Instagram.\nPlease visit: https://instagram.com/ig_gap_")
         else:
             self.show_popup("Instagram", "Visit: https://instagram.com/ig_gap_")
 
     def show_popup(self, title, message):
         """Show information popup"""
-        popup = Popup(title=title, size_hint=(0.8, 0.3))
-        content = BoxLayout(orientation='vertical', padding=10, spacing=10)
-        content.add_widget(Label(text=message, color=get_color_from_hex("#000000")))
-        close_btn = Button(text='Close', size_hint=(1, 0.3))
+        popup = Popup(title=title, size_hint=(0.85, 0.35))
+        content = BoxLayout(orientation='vertical', padding=15, spacing=10)
+        content.add_widget(Label(text=message, color=get_color_from_hex("#000000"), markup=True))
+        close_btn = Button(text='Close', size_hint=(1, 0.3), background_color=get_color_from_hex("#1DA1F2"))
         close_btn.bind(on_press=popup.dismiss)
         content.add_widget(close_btn)
         popup.content = content
@@ -85,9 +102,9 @@ class VolumeControl(BoxLayout):
 
     def create_slider(self, label_text, stream_type=None):
         """Create a volume slider with label and value display"""
-        box = BoxLayout(orientation='horizontal', size_hint=(1, 0.12), spacing=10)
+        box = BoxLayout(orientation='horizontal', size_hint=(1, 0.11), spacing=10)
         
-        lbl = Label(text=label_text, color=get_color_from_hex("#FFFFFF"), size_hint=(0.3, 1))
+        lbl = Label(text=label_text, color=get_color_from_hex("#FFFFFF"), size_hint=(0.3, 1), bold=True)
         
         # Get current volume if possible
         current_vol = 50
@@ -100,7 +117,7 @@ class VolumeControl(BoxLayout):
         
         sld = Slider(min=0, max=100, value=current_vol, size_hint=(0.5, 1))
         val_lbl = Label(text=f"{int(current_vol)}%", color=get_color_from_hex("#1DA1F2"), 
-                       size_hint=(0.2, 1), bold=True)
+                       size_hint=(0.2, 1), bold=True, font_size='14sp')
         
         # Store slider info for volume control
         self.volume_sliders[label_text] = {
@@ -120,6 +137,9 @@ class VolumeControl(BoxLayout):
 
     def update_volume(self, slider_name, value):
         """Update volume label and set system volume"""
+        if slider_name not in self.volume_sliders:
+            return
+            
         slider_info = self.volume_sliders[slider_name]
         slider_info['label'].text = f"{int(value)}%"
         
@@ -132,15 +152,49 @@ class VolumeControl(BoxLayout):
             except Exception as e:
                 print(f"Error setting volume for {slider_name}: {e}")
 
+    def mute_all_volumes(self, instance):
+        """Mute all volume streams"""
+        if self.audio_manager:
+            for slider_name, slider_info in self.volume_sliders.items():
+                try:
+                    slider_info['slider'].value = 0
+                    self.update_volume(slider_name, 0)
+                except Exception as e:
+                    print(f"Error muting {slider_name}: {e}")
+        else:
+            for slider_name, slider_info in self.volume_sliders.items():
+                slider_info['slider'].value = 0
+        
+        self.show_popup("Muted", "✅ All volumes muted!")
+
+    def unmute_all_volumes(self, instance):
+        """Unmute all volume streams to 70%"""
+        default_volume = 70
+        if self.audio_manager:
+            for slider_name, slider_info in self.volume_sliders.items():
+                try:
+                    slider_info['slider'].value = default_volume
+                    self.update_volume(slider_name, default_volume)
+                except Exception as e:
+                    print(f"Error unmuting {slider_name}: {e}")
+        else:
+            for slider_name, slider_info in self.volume_sliders.items():
+                slider_info['slider'].value = default_volume
+        
+        self.show_popup("Unmuted", f"✅ All volumes set to {default_volume}%!")
+
 class VolumeApp(App):
     def build(self):
         self.title = "MyKivyVolumeApp"
         from kivy.core.window import Window
-        Window.clearcolor = get_color_from_hex("#222222")
+        Window.clearcolor = get_color_from_hex("#1a1a1a")
+        Window.size = (400, 800)
         
         if not HAS_PYJNIUS:
-            print("Warning: pyjnius not available. Volume control will not work on Android.")
-            print("This is normal for desktop testing.")
+            print("⚠️ Warning: pyjnius not available. Volume control will not work on Android.")
+            print("✓ This is normal for desktop testing.")
+        else:
+            print("✅ pyjnius loaded successfully. Volume control is active!")
         
         return VolumeControl()
 
