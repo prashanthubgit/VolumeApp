@@ -1,20 +1,14 @@
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
 from kivy.uix.slider import Slider
 from kivy.uix.button import Button
-from kivy.uix.togglebutton import ToggleButton
 from kivy.utils import get_color_from_hex
 from kivy.uix.popup import Popup
-from kivy.clock import Clock
-from kivy.garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
-import os
 
 # Try to import pyjnius for Android volume control
 try:
-    from jnius import autoclass, cast
-    PythonJavaClass = autoclass('java.lang.Object')
+    from jnius import autoclass
     Context = autoclass('android.content.Context')
     AudioManager = autoclass('android.media.AudioManager')
     PythonActivity = autoclass('org.kivy.android.PythonActivity')
@@ -93,7 +87,7 @@ class VolumeControl(BoxLayout):
         """Show information popup"""
         popup = Popup(title=title, size_hint=(0.85, 0.35))
         content = BoxLayout(orientation='vertical', padding=15, spacing=10)
-        content.add_widget(Label(text=message, color=get_color_from_hex("#000000"), markup=True))
+        content.add_widget(Label(text=message, color=get_color_from_hex("#000000")))
         close_btn = Button(text='Close', size_hint=(1, 0.3), background_color=get_color_from_hex("#1DA1F2"))
         close_btn.bind(on_press=popup.dismiss)
         content.add_widget(close_btn)
